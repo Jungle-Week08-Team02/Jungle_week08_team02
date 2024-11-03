@@ -91,10 +91,14 @@ timer_elapsed (int64_t then) {
 void
 timer_sleep (int64_t ticks) {
 	int64_t start = timer_ticks ();
+	int64_t wake_tick = start + ticks;
 
 	ASSERT (intr_get_level () == INTR_ON);
-	while (timer_elapsed (start) < ticks)
-		thread_yield ();
+
+	/* sleep-awake로 수정 전 코드. busy-wating을 이용함 */
+	// while (timer_elapsed (start) < ticks)
+	// 	thread_yield ();
+	thread_sleep(wake_tick);
 }
 
 /* Suspends execution for approximately MS milliseconds. */
@@ -126,6 +130,7 @@ static void
 timer_interrupt (struct intr_frame *args UNUSED) {
 	ticks++;
 	thread_tick ();
+	thread_awake(ticks); // 매 tick 마다 대기 중인 스레드 깨우기
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
