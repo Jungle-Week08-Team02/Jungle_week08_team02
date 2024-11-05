@@ -28,8 +28,8 @@
    that are ready to run but not actually running. */
 static struct list ready_list;
 
-// List of processes in THREAD_BLOCK state
-static struct list sleep_list;
+// THREAD_BLOCK 상태의 스레드를 할당할 리스트
+struct list sleep_list;
 
 /* Idle thread. */
 static struct thread *idle_thread;
@@ -338,19 +338,22 @@ thread_sleep (int64_t wake_tick) {
 }
 
 // sleep_list에 있는 blocked 상태의 스레드를 unblock 하는 함수
-void
+void 
 thread_awake(int64_t current_tick) {
-	while (!list_empty(&sleep_list))
-	{
-		struct thread *t = list_entry(list_front(&sleep_list), struct thread, elem);
-		if (t->wake_tick > current_tick) {
-			break;
-		}
-		list_pop_front(&sleep_list); //sleep list에서 pop
-		thread_unblock(t); // 스레드를 ready 상태로 전환
-	}
-	
+    struct list_elem *e = list_begin(&sleep_list);
+
+    while (e != list_end(&sleep_list)) {
+        struct thread *t = list_entry(e, struct thread, elem);
+        
+        if (t->wake_tick <= current_tick) {
+            e = list_remove(e);  // 요소를 제거하고 다음 요소로 이동
+            thread_unblock(t);
+        } else {
+            e = list_next(e);  // 조건에 맞지 않으면 다음 요소로 이동
+        }
+    }
 }
+
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void

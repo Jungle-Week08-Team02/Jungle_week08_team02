@@ -130,7 +130,8 @@ static void
 timer_interrupt (struct intr_frame *args UNUSED) {
 	ticks++;
 	thread_tick ();
-	thread_awake(ticks); // 매 tick 마다 대기 중인 스레드 깨우기
+	// 매 timer_interrupt 마다 대기 중인 스레드 깨우기
+	thread_awake(ticks);
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
