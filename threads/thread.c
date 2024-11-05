@@ -82,6 +82,54 @@ static tid_t allocate_tid (void);
 // setup temporal gdt first.
 static uint64_t gdt[3] = { 0, 0x00af9a000000ffff, 0x00cf92000000ffff };
 
+/* 여기서 부터 구현한 함수 */
+// *************************************************************************************//
+// sleep_list에 스레드 삽입 중 정렬 위해 priority을 비교하는 함수
+bool
+cmp_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
+	struct thread *t_a = list_entry(a, struct thread, elem);
+	struct thread *t_b = list_entry(b, struct thread, elem);
+	return t_a->priority > t_b->priority;
+}
+
+// sleep_list에 스레드 삽입 중 정렬 위해 wake_tick을 비교하는 함수
+bool
+thread_wake_tick_cmp(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
+	struct thread *t_a = list_entry(a, struct thread, elem);
+	struct thread *t_b = list_entry(b, struct thread, elem);
+	return t_a->wake_tick < t_b->wake_tick;
+}
+
+// thread를 block 상태로 수정하고 sleep_list에 추가하는 함수
+void
+thread_sleep (int64_t wake_tick) {
+	struct thread *curr = thread_current ();
+	enum intr_level old_level;
+
+	ASSERT (!intr_context ());
+
+	old_level = intr_disable ();
+	curr->wake_tick = wake_tick; // 스레드가 꺠어날 시각 저장
+	// list_insert_ordered 함수를 통해 sleep_list의 정렬 상태를 유지하면서 삽입
+	list_insert_ordered(&sleep_list, &curr->elem, thread_wake_tick_cmp, NULL);
+	thread_block(); // 현재 스레드를 BLOCK 상태로 전환
+
+	intr_set_level (old_level);
+}
+
+// 현재 실행 중인 스레드와 레디 리스트의 가장 앞 스레드의 우선 순위를 확인해 스케줄
+void
+schedule_by_priority () {
+	struct thread * curr = thread_current();
+
+	if (!list_empty(&ready_list)){
+		struct thread *highest_priority_thread = list_entry(list_front(&ready_list), struct thread, elem);
+		if (curr->priority < highest_priority_thread->priority)
+			thread_yield();
+	}
+}
+// *************************************************************************************//
+
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
    general and it is possible in this case only because loader.S
@@ -245,7 +293,10 @@ thread_unblock (struct thread *t) {
 
 	old_level = intr_disable ();
 	ASSERT (t->status == THREAD_BLOCKED);
-	list_push_back (&ready_list, &t->elem);
+	// list_push_back (&ready_list, &t->elem);
+	
+	list_insert_ordered(&ready_list, & t->elem, cmp_priority, NULL);
+
 	t->status = THREAD_READY;
 	intr_set_level (old_level);
 }
@@ -308,32 +359,9 @@ thread_yield (void) {
 
 	old_level = intr_disable ();
 	if (curr != idle_thread)
-		list_push_back (&ready_list, &curr->elem);
+		list_insert_ordered(&ready_list, & curr->elem, cmp_priority, NULL); //우선순위 기준으로 삽입
+		// list_push_back (&ready_list, &curr->elem);
 	do_schedule (THREAD_READY);
-	intr_set_level (old_level);
-}
-
-// sleep_list에 스레드 삽입 중 정렬할 때 사용하는 함수
-bool
-thread_wake_tick_cmp(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
-	struct thread *t_a = list_entry(a, struct thread, elem);
-	struct thread *t_b = list_entry(b, struct thread, elem);
-	return t_a->wake_tick < t_b->wake_tick;
-}
-
-void
-thread_sleep (int64_t wake_tick) {
-	struct thread *curr = thread_current ();
-	enum intr_level old_level;
-
-	ASSERT (!intr_context ());
-
-	old_level = intr_disable ();
-	curr->wake_tick = wake_tick; // 스레드가 꺠어날 시각 저장
-	// list_insert_ordered 함수를 통해 sleep_list의 정렬 상태를 유지하면서 삽입
-	list_insert_ordered(&sleep_list, &curr->elem, thread_wake_tick_cmp, NULL);
-	thread_block(); // 현재 스레드를 BLOCK 상태로 전환
-
 	intr_set_level (old_level);
 }
 
@@ -358,8 +386,12 @@ thread_awake(int64_t current_tick) {
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
 thread_set_priority (int new_priority) {
-	thread_current ()->priority = new_priority;
+    struct thread *curr = thread_current();
+    curr->priority = new_priority;
+
+    schedule_by_priority();
 }
+
 
 /* Returns the current thread's priority. */
 int

@@ -145,11 +145,12 @@ int thread_get_load_avg (void);
 
 void do_iret (struct intr_frame *tf);
 
-// thread_sleep 함수 추가
+/* 여기서 부터 구현 함수 */
+// *************************************************************************************//
 void thread_sleep (int64_t);
-// thread_awake 함수 추가
 void thread_awake(int64_t);
-// thread_wake_tick_cmp 함수 추가
 bool thread_wake_tick_cmp(const struct list_elem *, const struct list_elem *, void *);
-
+bool cmp_priority(const struct list_elem *, const struct list_elem *, void *);
+void schedule_by_priority ();
+// *************************************************************************************//
 #endif /* threads/thread.h */
