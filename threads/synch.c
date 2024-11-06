@@ -70,7 +70,7 @@ sema_down (struct semaphore *sema) {
 		// 원래 코드 -> 그냥 들어온 순서대로 waiters 리스트에 삽입
 		// list_push_back (&sema->waiters, &thread_current ()->elem);
 		// 우선순위를 기준으로 waiters 리스트에 삽입.
-		list_insert_ordered(&sema->waiters,&thread_current ()->elem,cmp_priority, NULL);
+		list_insert_ordered(&sema->waiters,&thread_current ()->elem,cmp_thread_priority, NULL);
 		thread_block ();
 	}
 	// sema->value != 0이면 sema->value 1 감소
@@ -118,7 +118,7 @@ sema_up (struct semaphore *sema) {
 	if (!list_empty (&sema->waiters))
 	{
 		// 혹시 모르니 unblock 하기 전에 리스트 한 번 더 정렬
-		list_sort(&sema->waiters,cmp_priority,NULL);
+		list_sort(&sema->waiters,cmp_thread_priority,NULL);
 	  // waiters 리스트에서 가장 앞에 있는 스레드를 unblock하는 함수 
 		thread_unblock (list_entry (list_pop_front (&sema->waiters),
 					struct thread, elem));

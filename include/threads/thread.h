@@ -150,7 +150,7 @@ void do_iret (struct intr_frame *tf);
 void thread_sleep (int64_t);
 void thread_awake(int64_t);
 bool thread_wake_tick_cmp(const struct list_elem *, const struct list_elem *, void *);
-bool cmp_priority(const struct list_elem *, const struct list_elem *, void *);
+bool cmp_thread_priority(const struct list_elem *, const struct list_elem *, void *);
 void schedule_by_priority ();
 // *************************************************************************************//
 #endif /* threads/thread.h */

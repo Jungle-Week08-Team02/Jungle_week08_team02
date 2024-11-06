@@ -86,7 +86,7 @@ static uint64_t gdt[3] = { 0, 0x00af9a000000ffff, 0x00cf92000000ffff };
 // *************************************************************************************//
 // sleep_list에 스레드 삽입 중 정렬 위해 priority을 비교하는 함수
 bool
-cmp_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
+cmp_thread_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
 	struct thread *t_a = list_entry(a, struct thread, elem);
 	struct thread *t_b = list_entry(b, struct thread, elem);
 	return t_a->priority > t_b->priority;
@@ -298,7 +298,7 @@ thread_unblock (struct thread *t) {
 	ASSERT (t->status == THREAD_BLOCKED);
 	// list_push_back (&ready_list, &t->elem);
 	
-	list_insert_ordered(&ready_list, & t->elem, cmp_priority, NULL);
+	list_insert_ordered(&ready_list, & t->elem, cmp_thread_priority, NULL);
 
 	t->status = THREAD_READY;
 	intr_set_level (old_level);
@@ -362,7 +362,7 @@ thread_yield (void) {
 
 	old_level = intr_disable ();
 	if (curr != idle_thread)
-		list_insert_ordered(&ready_list, & curr->elem, cmp_priority, NULL); //우선순위 기준으로 삽입
+		list_insert_ordered(&ready_list, & curr->elem, cmp_thread_priority, NULL); //우선순위 기준으로 삽입
 		// list_push_back (&ready_list, &curr->elem);
 	do_schedule (THREAD_READY);
 	intr_set_level (old_level);
