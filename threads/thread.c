@@ -159,6 +159,7 @@ thread_init (void) {
 	/* Init the globla thread context */
 	lock_init (&tid_lock);
 	list_init (&ready_list);
+	// sleep_list를 초기화 하는 함수 호출 추가
 	list_init (&sleep_list);
 	list_init (&destruction_req);
 
@@ -167,6 +168,7 @@ thread_init (void) {
 	init_thread (initial_thread, "main", PRI_DEFAULT);
 	initial_thread->status = THREAD_RUNNING;
 	initial_thread->tid = allocate_tid ();
+	// wake_tick을 0으로 초기화 하는 코드 추가
 	initial_thread->wake_tick = 0;
 }
 
@@ -259,6 +261,7 @@ thread_create (const char *name, int priority,
 
 	/* Add to run queue. */
 	thread_unblock (t);
+	schedule_by_priority();
 
 	return tid;
 }

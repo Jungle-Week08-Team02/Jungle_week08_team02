@@ -65,10 +65,15 @@ sema_down (struct semaphore *sema) {
 	ASSERT (!intr_context ());
 
 	old_level = intr_disable ();
+	// sema->value가 0이라면 wait 리스트에 넣고 스레드 block함.
 	while (sema->value == 0) {
-		list_push_back (&sema->waiters, &thread_current ()->elem);
+		// 원래 코드 -> 그냥 들어온 순서대로 waiters 리스트에 삽입
+		// list_push_back (&sema->waiters, &thread_current ()->elem);
+		// 우선순위를 기준으로 waiters 리스트에 삽입.
+		list_insert_ordered(&sema->waiters,&thread_current ()->elem,cmp_priority, NULL);
 		thread_block ();
 	}
+	// sema->value != 0이면 sema->value 1 감소
 	sema->value--;
 	intr_set_level (old_level);
 }
@@ -109,10 +114,17 @@ sema_up (struct semaphore *sema) {
 	ASSERT (sema != NULL);
 
 	old_level = intr_disable ();
+	// sema->waiters 리스트에 대기 중인 스레드가 있다면
 	if (!list_empty (&sema->waiters))
+	{
+		// 혹시 모르니 unblock 하기 전에 리스트 한 번 더 정렬
+		list_sort(&sema->waiters,cmp_priority,NULL);
+	  // waiters 리스트에서 가장 앞에 있는 스레드를 unblock하는 함수 
 		thread_unblock (list_entry (list_pop_front (&sema->waiters),
 					struct thread, elem));
+	}
 	sema->value++;
+	schedule_by_priority();
 	intr_set_level (old_level);
 }
 
@@ -282,7 +294,8 @@ cond_wait (struct condition *cond, struct lock *lock) {
 	ASSERT (lock_held_by_current_thread (lock));
 
 	sema_init (&waiter.semaphore, 0);
-	list_push_back (&cond->waiters, &waiter.elem);
+	// list_push_back (&cond->waiters, &waiter.elem);
+	list_insert_ordered(&cond->waiters,&waiter.elem,cmp_sema_priority,NULL);
 	lock_release (lock);
 	sema_down (&waiter.semaphore);
 	lock_acquire (lock);
@@ -303,8 +316,11 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED) {
 	ASSERT (lock_held_by_current_thread (lock));
 
 	if (!list_empty (&cond->waiters))
+	{
+		list_sort(&cond->waiters, cmp_sema_priority, NULL);
 		sema_up (&list_entry (list_pop_front (&cond->waiters),
 					struct semaphore_elem, elem)->semaphore);
+	}
 }
 
 /* Wakes up all threads, if any, waiting on COND (protected by
@@ -321,3 +337,17 @@ cond_broadcast (struct condition *cond, struct lock *lock) {
 	while (!list_empty (&cond->waiters))
 		cond_signal (cond, lock);
 }
+
+/* 여기서 부터 구현한 함수 */
+// *************************************************************************************//
+bool
+cmp_sema_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
+	struct semaphore_elem *a_sema = list_entry (a, struct semaphore_elem, elem);
+	struct semaphore_elem *b_sema = list_entry (b, struct semaphore_elem, elem);
+
+	struct list *waiter_a_sema = &(a_sema->semaphore.waiters);
+	struct list *waiter_b_sema = &(b_sema->semaphore.waiters);
+
+	return list_entry (list_begin(waiter_a_sema), struct thread, elem)->priority > list_entry(list_begin(waiter_b_sema),struct thread, elem)->priority;
+}
+// *************************************************************************************//
