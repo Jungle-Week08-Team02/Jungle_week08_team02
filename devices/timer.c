@@ -32,10 +32,16 @@ static void real_time_sleep (int64_t num, int32_t denom);
 /* Sets up the 8254 Programmable Interval Timer (PIT) to
    interrupt PIT_FREQ times per second, and registers the
    corresponding interrupt. */
+
+/**
+ * PIT(Programmable Interval Timer)는 정기적인 시간 간격으로 CPU에 인터럽트를 발생시키는 하드웨어 장치
+ * 프로그램 가능한 타이머로, 일정한 시간 간격으로 인터럽트를 발생시켜 시스템의 시간 관리
+ */
 void
 timer_init (void) {
 	/* 8254 input frequency divided by TIMER_FREQ, rounded to
 	   nearest. */
+	// TIMER_FREQ 는 타이머 인터럽트가 발생해야 하는 빈도(횟수), 1초에 몇 번의 인터럽트를 발생시킬지 설정하는 값
 	uint16_t count = (1193180 + TIMER_FREQ / 2) / TIMER_FREQ;
 
 	outb (0x43, 0x34);    /* CW: counter 0, LSB then MSB, mode 2, binary. */
@@ -46,6 +52,10 @@ timer_init (void) {
 }
 
 /* Calibrates loops_per_tick, used to implement brief delays. */
+
+/**
+ * 타이머 초기 시간 조정하는 함수
+ */
 void
 timer_calibrate (void) {
 	unsigned high_bit, test_bit;
@@ -93,8 +103,13 @@ timer_sleep (int64_t ticks) {
 	int64_t start = timer_ticks ();
 
 	ASSERT (intr_get_level () == INTR_ON);
-	while (timer_elapsed (start) < ticks)
-		thread_yield ();
+	
+	// 1. busy wait
+	// while (timer_elapsed (start) < ticks)
+	// 	thread_yield ();
+
+	// 2. sleep wakeup
+	thread_sleep(start + ticks);
 }
 
 /* Suspends execution for approximately MS milliseconds. */
@@ -126,6 +141,7 @@ static void
 timer_interrupt (struct intr_frame *args UNUSED) {
 	ticks++;
 	thread_tick ();
+	thread_wakeup(ticks);
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer

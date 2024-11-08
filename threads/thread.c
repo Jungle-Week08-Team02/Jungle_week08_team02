@@ -28,6 +28,9 @@
    that are ready to run but not actually running. */
 static struct list ready_list;
 
+// #1
+static struct list sleep_list;
+
 /* Idle thread. */
 static struct thread *idle_thread;
 
@@ -109,6 +112,9 @@ thread_init (void) {
 	lock_init (&tid_lock);
 	list_init (&ready_list);
 	list_init (&destruction_req);
+
+	// #1
+	list_init (&sleep_list);
 
 	/* Set up a thread structure for the running thread. */
 	initial_thread = running_thread ();
@@ -306,6 +312,44 @@ thread_yield (void) {
 		list_push_back (&ready_list, &curr->elem);
 	do_schedule (THREAD_READY);
 	intr_set_level (old_level);
+}
+
+// #1
+void
+thread_sleep (int64_t ticks) {
+	struct thread *cur = thread_current ();
+	enum intr_level old_level;
+
+	// disable interrupt
+	old_level = intr_disable (); 
+
+	// store the local tick
+	// 현재 스레드가 깨어나야 할 tick 값을 저장
+	cur->wakeup_tick = ticks;
+	
+	list_push_back(&sleep_list, &cur->elem);
+	if (cur != idle_thread) {
+		thread_block();
+	}
+	intr_set_level(old_level);
+}
+
+// #1
+void
+thread_wakeup (int64_t ticks) {
+	struct list_elem *le = list_begin(&sleep_list);
+	struct thread *t;
+
+	while (le != list_end(&sleep_list)) {
+		t = list_entry(le, struct thread, elem);
+
+		if (t->wakeup_tick <= ticks) {
+			le = list_remove(le);
+			thread_unblock(t);
+			continue;
+		}
+		le = list_next(le);
+	}
 }
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
