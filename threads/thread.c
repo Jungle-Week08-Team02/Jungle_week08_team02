@@ -66,6 +66,10 @@ static void do_schedule(int status);
 static void schedule (void);
 static tid_t allocate_tid (void);
 
+// #2 
+static void preempt_if_higher_priority(struct thread *t);
+static bool is_higher_priority (const struct list_elem *a, const struct list_elem *b, void *aux);
+
 /* Returns true if T appears to point to a valid thread. */
 #define is_thread(t) ((t) != NULL && (t)->magic == THREAD_MAGIC)
 
@@ -160,6 +164,7 @@ thread_tick (void) {
 		intr_yield_on_return ();
 }
 
+
 /* Prints thread statistics. */
 void
 thread_print_stats (void) {
@@ -213,6 +218,9 @@ thread_create (const char *name, int priority,
 	/* Add to run queue. */
 	thread_unblock (t);
 
+	// #2
+	preempt_if_higher_priority(t);
+
 	return tid;
 }
 
@@ -246,7 +254,9 @@ thread_unblock (struct thread *t) {
 
 	old_level = intr_disable ();
 	ASSERT (t->status == THREAD_BLOCKED);
-	list_push_back (&ready_list, &t->elem);
+	// #2
+	// list_push_back (&ready_list, &t->elem);
+	list_insert_ordered(&ready_list, &t->elem, is_higher_priority, NULL);
 	t->status = THREAD_READY;
 	intr_set_level (old_level);
 }
@@ -309,53 +319,18 @@ thread_yield (void) {
 
 	old_level = intr_disable ();
 	if (curr != idle_thread)
-		list_push_back (&ready_list, &curr->elem);
+		list_insert_ordered (&ready_list, &curr->elem, is_higher_priority, NULL);
+	
 	do_schedule (THREAD_READY);
 	intr_set_level (old_level);
-}
-
-// #1
-void
-thread_sleep (int64_t ticks) {
-	struct thread *cur = thread_current ();
-	enum intr_level old_level;
-
-	// disable interrupt
-	old_level = intr_disable (); 
-
-	// store the local tick
-	// 현재 스레드가 깨어나야 할 tick 값을 저장
-	cur->wakeup_tick = ticks;
-	
-	list_push_back(&sleep_list, &cur->elem);
-	if (cur != idle_thread) {
-		thread_block();
-	}
-	intr_set_level(old_level);
-}
-
-// #1
-void
-thread_wakeup (int64_t ticks) {
-	struct list_elem *le = list_begin(&sleep_list);
-	struct thread *t;
-
-	while (le != list_end(&sleep_list)) {
-		t = list_entry(le, struct thread, elem);
-
-		if (t->wakeup_tick <= ticks) {
-			le = list_remove(le);
-			thread_unblock(t);
-			continue;
-		}
-		le = list_next(le);
-	}
 }
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
 thread_set_priority (int new_priority) {
 	thread_current ()->priority = new_priority;
+	// #2
+	preemption();
 }
 
 /* Returns the current thread's priority. */
@@ -631,4 +606,73 @@ allocate_tid (void) {
 	lock_release (&tid_lock);
 
 	return tid;
+}
+
+// #1
+void
+thread_sleep (int64_t ticks) {
+	struct thread *cur = thread_current ();
+	enum intr_level old_level;
+
+	// disable interrupt
+	old_level = intr_disable (); 
+
+	// store the local tick
+	// 현재 스레드가 깨어나야 할 tick 값을 저장
+	cur->wakeup_tick = ticks;
+	
+	list_push_back(&sleep_list, &cur->elem);
+	if (cur != idle_thread) {
+		thread_block();
+	}
+	intr_set_level(old_level);
+}
+
+// #1
+void
+thread_wakeup (int64_t ticks) {
+	struct list_elem *le = list_begin(&sleep_list);
+	struct thread *t;
+
+	while (le != list_end(&sleep_list)) {
+		t = list_entry(le, struct thread, elem);
+
+		if (t->wakeup_tick <= ticks) {
+			le = list_remove(le);
+			thread_unblock(t);
+			continue;
+		}
+		le = list_next(le);
+	}
+}
+
+// #2
+static void
+preempt_if_higher_priority(struct thread *t) {
+	if (thread_current()->priority < t->priority) {
+		thread_yield();
+	}
+}
+
+static void
+preempt_if_lower_priority(struct thread *t) {
+	if (thread_current()->priority > t->priority) {
+		thread_yield();
+	}
+}
+
+// #2
+void
+preemption(void) {
+	if (list_empty(&ready_list)) {
+		return;
+	}
+
+	preempt_if_higher_priority(list_entry(list_front(&ready_list), struct thread, elem));
+}
+
+// #2
+static bool
+is_higher_priority (const struct list_elem *a, const struct list_elem *b, void *aux) {
+	return list_entry(a, struct thread, elem)->priority > list_entry(b, struct thread, elem)->priority;
 }

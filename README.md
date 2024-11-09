@@ -53,7 +53,9 @@ Execution of 'alarm-multiple' complete.
 Timer: 620 ticks
 Thread: 0 idle ticks, 621 kernel ticks, 0 user ticks
 ```
-### # 1 sleep wakeup 
+### # 1 
+- busy wait 방식을 sleep wakeup 로 수정
+- 
 ```
 // result: make check
 
@@ -103,4 +105,38 @@ Executing 'alarm-multiple':
 Execution of 'alarm-multiple' complete.
 Timer: 628 ticks
 Thread: 550 idle ticks, 79 kernel ticks, 0 user ticks
+```
+### # 2
+- 쓰레드 우선순위가 바뀌어서 CPU 를 선점해야 하는 경우
+  - thread_create 이후 (새로 생성된 쓰레드와 우선순위 비교)
+  - thread_set_priority 이후 
+```
+pass tests/threads/alarm-single
+pass tests/threads/alarm-multiple
+pass tests/threads/alarm-simultaneous
+pass tests/threads/alarm-priority
+pass tests/threads/alarm-zero
+pass tests/threads/alarm-negative
+pass tests/threads/priority-change
+FAIL tests/threads/priority-donate-one
+FAIL tests/threads/priority-donate-multiple
+FAIL tests/threads/priority-donate-multiple2
+FAIL tests/threads/priority-donate-nest
+FAIL tests/threads/priority-donate-sema
+FAIL tests/threads/priority-donate-lower
+pass tests/threads/priority-fifo
+pass tests/threads/priority-preempt
+FAIL tests/threads/priority-sema
+FAIL tests/threads/priority-condvar
+FAIL tests/threads/priority-donate-chain
+FAIL tests/threads/mlfqs/mlfqs-load-1
+FAIL tests/threads/mlfqs/mlfqs-load-60
+FAIL tests/threads/mlfqs/mlfqs-load-avg
+FAIL tests/threads/mlfqs/mlfqs-recent-1
+FAIL tests/threads/mlfqs/mlfqs-fair-2
+FAIL tests/threads/mlfqs/mlfqs-fair-20
+FAIL tests/threads/mlfqs/mlfqs-nice-2
+FAIL tests/threads/mlfqs/mlfqs-nice-10
+FAIL tests/threads/mlfqs/mlfqs-block
+18 of 27 tests failed.
 ```
