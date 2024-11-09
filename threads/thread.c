@@ -128,6 +128,64 @@ schedule_by_priority () {
 			thread_yield();
 	}
 }
+
+// donations 리스트에서 현재 스레드의 wait_on_lock->holder 타고 올라가면서 우선순위 donate.
+void
+do_donate()
+{
+	int depth;
+	struct thread *curr = thread_current();
+
+	for (depth = 0; depth < 8; depth++){
+		if (!curr -> wait_on_lock)
+			break;
+		struct thread * holder = curr -> wait_on_lock->holder;
+		// holder의 priority를 현재 스레드의 priority로 수정
+		// *어차피 리스트에 넣을 때 d_elem 우선순위로 내림차순 정렬되어 있으므로 비교할 필요가 없다
+		holder->priority = curr->priority;
+		curr = holder;
+	}
+}
+
+// donations 리스트의 정렬을 위한 비교 함수
+bool
+cmp_delem_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
+{
+	return list_entry(a, struct thread, d_elem)->priority > list_entry(b, struct thread, d_elem)->priority;
+}
+
+void
+remove_with_lock (struct lock *lock)
+{
+	struct list_elem *e = NULL;
+	// 현재 실행 중 스레드 가져오기
+	struct thread* curr = thread_current();
+	
+	// 해당 lock을 요구하는 스레드들 모두 donation에서 풀어줌
+	for (e = list_begin (&curr->donations); e!= list_end (&curr->donations); e = list_next(e)){
+		struct thread *t = list_entry(e, struct thread, d_elem);
+		if (t->wait_on_lock == lock)
+			list_remove(&t->d_elem);
+	}
+}
+
+// donations 리스트의 가장 앞 스레드 우선순위와 비교 해 donation 부여 
+// lock_release로 donation이 변경되는 경우, set_priority()로 우선순위 변경되는 경우 사용.
+void
+re_dona_priority()
+{
+	struct thread *curr = thread_current();
+
+	curr->priority = curr->init_priority;
+
+	if (!list_empty(&curr->donations)){
+		list_sort(&curr->donations,cmp_delem_priority,NULL);
+
+		struct thread *d_front = list_entry(list_front(&curr->donations), struct thread, d_elem);
+		if (d_front->priority > curr->priority)
+			curr->priority = d_front->priority;
+	}
+}
 // *************************************************************************************//
 
 /* Initializes the threading system by transforming the code
@@ -390,9 +448,12 @@ thread_awake(int64_t current_tick) {
 void
 thread_set_priority (int new_priority) {
     struct thread *curr = thread_current();
-    curr->priority = new_priority;
-
-    schedule_by_priority();
+		// thread의 init_priority를 수정하도록 함
+    curr->init_priority = new_priority;
+		// donation 정보를 바탕으로 priority 재설정
+		re_dona_priority();
+		// 우선순위를 기준으로 ready_list의 가장 앞 스레드로 선점
+		schedule_by_priority();
 }
 
 
@@ -490,6 +551,12 @@ init_thread (struct thread *t, const char *name, int priority) {
 	strlcpy (t->name, name, sizeof t->name);
 	t->tf.rsp = (uint64_t) t + PGSIZE - sizeof (void *);
 	t->priority = priority;
+	
+	// donation 구현을 위해 아래 코드들 추가
+	t->init_priority = priority;
+	t->wait_on_lock = NULL;
+	list_init(&t->donations)
+	;
 	t->magic = THREAD_MAGIC;
 }
 

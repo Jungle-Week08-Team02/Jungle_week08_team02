@@ -71,6 +71,7 @@ sema_down (struct semaphore *sema) {
 		// list_push_back (&sema->waiters, &thread_current ()->elem);
 		// 우선순위를 기준으로 waiters 리스트에 삽입.
 		list_insert_ordered(&sema->waiters,&thread_current ()->elem,cmp_thread_priority, NULL);
+		
 		thread_block ();
 	}
 	// sema->value != 0이면 sema->value 1 감소
@@ -200,8 +201,19 @@ lock_acquire (struct lock *lock) {
 	ASSERT (!intr_context ());
 	ASSERT (!lock_held_by_current_thread (lock));
 
+	struct thread *curr = thread_current();
+	// 이미 holder가 있는 경우 (사용 중인 경우)
+	if (lock->holder){
+		curr->wait_on_lock = lock;
+		// 우선순위를 기준으로 donation 리스트에 삽입.
+		list_insert_ordered(&lock->holder->donations, &curr->d_elem, cmp_delem_priority, NULL);
+		do_donate();
+	}
+	// holder가 없는 경우 (lock의 주인이 되는 경우)
 	sema_down (&lock->semaphore);
-	lock->holder = thread_current ();
+	// 현재 스레드의 wait_on_lock을 명시적으로 NULL로 변경
+	curr->wait_on_lock = NULL;
+	lock->holder = curr;
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -233,8 +245,14 @@ void
 lock_release (struct lock *lock) {
 	ASSERT (lock != NULL);
 	ASSERT (lock_held_by_current_thread (lock));
+	
+	remove_with_lock(lock);
+	// donations 리스트에 남은 리스트로 다시 donate
+	re_dona_priority();
 
+	// 해당 lock의 holder를 NULL로 설정
 	lock->holder = NULL;
+	// lock 해제
 	sema_up (&lock->semaphore);
 }
 
@@ -340,6 +358,7 @@ cond_broadcast (struct condition *cond, struct lock *lock) {
 
 /* 여기서 부터 구현한 함수 */
 // *************************************************************************************//
+// cond 변수에서 waiters 리스트 정렬을 위한 비교 함수
 bool
 cmp_sema_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
 	struct semaphore_elem *a_sema = list_entry (a, struct semaphore_elem, elem);

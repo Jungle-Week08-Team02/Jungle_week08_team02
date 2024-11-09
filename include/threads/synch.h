@@ -37,8 +37,10 @@ void cond_init (struct condition *);
 void cond_wait (struct condition *, struct lock *);
 void cond_signal (struct condition *, struct lock *);
 void cond_broadcast (struct condition *, struct lock *);
-
+/* 여기서 부터 구현한 함수 */
+// *************************************************************************************//
 bool cmp_sema_priority(const struct list_elem *, const struct list_elem *, void *);
+// *************************************************************************************//
 
 /* Optimization barrier.
  *
