@@ -95,6 +95,12 @@ struct thread {
 	// #1
 	int64_t wakeup_tick;
 
+	// #4
+	int64_t origin_priority;
+	struct lock *wait_on_lock;
+	struct list donations;
+	struct list_elem d_elem;
+
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */
 
@@ -155,5 +161,9 @@ void preemption(void);
 
 // #3
 bool is_higher_priority (const struct list_elem *a, const struct list_elem *b, void *aux);
+
+// #4
+bool is_donations_higher_priority (const struct list_elem *a, const struct list_elem *b, void *aux);
+void thread_update_donated_priority ();
 
 #endif /* threads/thread.h */

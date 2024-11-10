@@ -68,6 +68,7 @@ static tid_t allocate_tid (void);
 
 // #2 
 static void preempt_if_higher_priority(struct thread *t);
+static void preempt_if_lower_priority(struct thread *t);
 
 // #3
 // static bool is_higher_priority (const struct list_elem *a, const struct list_elem *b, void *aux);
@@ -259,6 +260,10 @@ thread_unblock (struct thread *t) {
 	// #2
 	// list_push_back (&ready_list, &t->elem);
 	list_insert_ordered(&ready_list, &t->elem, is_higher_priority, NULL);
+
+	// #4
+	preempt_if_lower_priority(t);
+	
 	t->status = THREAD_READY;
 	intr_set_level (old_level);
 }
@@ -330,7 +335,12 @@ thread_yield (void) {
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
 thread_set_priority (int new_priority) {
-	thread_current ()->priority = new_priority;
+	// #4
+	// thread_current ()->priority = new_priority;
+	thread_current()->origin_priority = new_priority;
+
+	thread_update_donated_priority();
+	
 	// #2
 	preemption();
 }
@@ -430,6 +440,11 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->tf.rsp = (uint64_t) t + PGSIZE - sizeof (void *);
 	t->priority = priority;
 	t->magic = THREAD_MAGIC;
+
+	// #4
+	t->origin_priority = priority;
+	t->wait_on_lock = NULL;
+	list_init(&t->donations);
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should
@@ -677,4 +692,25 @@ preemption(void) {
 bool
 is_higher_priority (const struct list_elem *a, const struct list_elem *b, void *aux) {
 	return list_entry(a, struct thread, elem)->priority > list_entry(b, struct thread, elem)->priority;
+}
+
+// #4
+bool
+is_donations_higher_priority (const struct list_elem *a, const struct list_elem *b, void *aux) {
+	return list_entry(a, struct thread, d_elem)->priority > list_entry(b, struct thread, d_elem)->priority;
+}
+
+// #4
+void thread_update_donated_priority () {
+	struct thread *cur = thread_current();
+
+	cur->priority = cur->origin_priority;
+
+	if(!list_empty(&cur->donations)) {
+		list_sort(&cur->donations, is_donations_higher_priority, NULL);
+		struct thread *first = list_entry(list_front(&cur->donations), struct thread, d_elem);
+		if (cur->priority < first->priority) {
+			cur->priority = first->priority;
+		}
+	}
 }
