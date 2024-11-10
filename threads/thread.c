@@ -68,7 +68,9 @@ static tid_t allocate_tid (void);
 
 // #2 
 static void preempt_if_higher_priority(struct thread *t);
-static bool is_higher_priority (const struct list_elem *a, const struct list_elem *b, void *aux);
+
+// #3
+// static bool is_higher_priority (const struct list_elem *a, const struct list_elem *b, void *aux);
 
 /* Returns true if T appears to point to a valid thread. */
 #define is_thread(t) ((t) != NULL && (t)->magic == THREAD_MAGIC)
@@ -672,7 +674,7 @@ preemption(void) {
 }
 
 // #2
-static bool
+bool
 is_higher_priority (const struct list_elem *a, const struct list_elem *b, void *aux) {
 	return list_entry(a, struct thread, elem)->priority > list_entry(b, struct thread, elem)->priority;
 }

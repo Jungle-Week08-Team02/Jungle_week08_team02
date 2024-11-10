@@ -153,4 +153,7 @@ void thread_wakeup (int64_t ticks);
 // #2
 void preemption(void);
 
+// #3
+bool is_higher_priority (const struct list_elem *a, const struct list_elem *b, void *aux);
+
 #endif /* threads/thread.h */
