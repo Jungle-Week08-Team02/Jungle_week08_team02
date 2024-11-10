@@ -201,6 +201,13 @@ lock_acquire (struct lock *lock) {
 	ASSERT (!intr_context ());
 	ASSERT (!lock_held_by_current_thread (lock));
 
+	// mlfqs 활성화 시
+	if (thread_mlfqs){
+		sema_down (&lock->semaphore);
+		lock->holder = thread_current();
+		return;
+	}
+
 	struct thread *curr = thread_current();
 	// 이미 holder가 있는 경우 (사용 중인 경우)
 	if (lock->holder){
@@ -246,12 +253,17 @@ lock_release (struct lock *lock) {
 	ASSERT (lock != NULL);
 	ASSERT (lock_held_by_current_thread (lock));
 	
+	// 해당 lock의 holder를 NULL로 설정
+	lock->holder = NULL;
+	// thread_mlfqs 활성화 시
+	if (thread_mlfqs){
+		sema_up(&lock->semaphore);
+		return;
+	}
+
 	remove_with_lock(lock);
 	// donations 리스트에 남은 리스트로 다시 donate
 	re_dona_priority();
-
-	// 해당 lock의 holder를 NULL로 설정
-	lock->holder = NULL;
 	// lock 해제
 	sema_up (&lock->semaphore);
 }
