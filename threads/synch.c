@@ -65,10 +65,16 @@ sema_down (struct semaphore *sema) {
 	ASSERT (!intr_context ());
 
 	old_level = intr_disable ();
+	// sema->value가 0이라면 wait 리스트에 넣고 스레드 block함.
 	while (sema->value == 0) {
-		list_push_back (&sema->waiters, &thread_current ()->elem);
+		// 원래 코드 -> 그냥 들어온 순서대로 waiters 리스트에 삽입
+		// list_push_back (&sema->waiters, &thread_current ()->elem);
+		// 우선순위를 기준으로 waiters 리스트에 삽입.
+		list_insert_ordered(&sema->waiters,&thread_current ()->elem,cmp_thread_priority, NULL);
+		
 		thread_block ();
 	}
+	// sema->value != 0이면 sema->value 1 감소
 	sema->value--;
 	intr_set_level (old_level);
 }
@@ -109,10 +115,17 @@ sema_up (struct semaphore *sema) {
 	ASSERT (sema != NULL);
 
 	old_level = intr_disable ();
+	// sema->waiters 리스트에 대기 중인 스레드가 있다면
 	if (!list_empty (&sema->waiters))
+	{
+		// 혹시 모르니 unblock 하기 전에 리스트 한 번 더 정렬
+		list_sort(&sema->waiters,cmp_thread_priority,NULL);
+	  // waiters 리스트에서 가장 앞에 있는 스레드를 unblock하는 함수 
 		thread_unblock (list_entry (list_pop_front (&sema->waiters),
 					struct thread, elem));
+	}
 	sema->value++;
+	schedule_by_priority();
 	intr_set_level (old_level);
 }
 
@@ -188,8 +201,26 @@ lock_acquire (struct lock *lock) {
 	ASSERT (!intr_context ());
 	ASSERT (!lock_held_by_current_thread (lock));
 
+	// mlfqs 활성화 시
+	if (thread_mlfqs){
+		sema_down (&lock->semaphore);
+		lock->holder = thread_current();
+		return;
+	}
+
+	struct thread *curr = thread_current();
+	// 이미 holder가 있는 경우 (사용 중인 경우)
+	if (lock->holder){
+		curr->wait_on_lock = lock;
+		// 우선순위를 기준으로 donation 리스트에 삽입.
+		list_insert_ordered(&lock->holder->donations, &curr->d_elem, cmp_delem_priority, NULL);
+		do_donate();
+	}
+	// holder가 없는 경우 (lock의 주인이 되는 경우)
 	sema_down (&lock->semaphore);
-	lock->holder = thread_current ();
+	// 현재 스레드의 wait_on_lock을 명시적으로 NULL로 변경
+	curr->wait_on_lock = NULL;
+	lock->holder = curr;
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -221,8 +252,19 @@ void
 lock_release (struct lock *lock) {
 	ASSERT (lock != NULL);
 	ASSERT (lock_held_by_current_thread (lock));
-
+	
+	// 해당 lock의 holder를 NULL로 설정
 	lock->holder = NULL;
+	// thread_mlfqs 활성화 시
+	if (thread_mlfqs){
+		sema_up(&lock->semaphore);
+		return;
+	}
+
+	remove_with_lock(lock);
+	// donations 리스트에 남은 리스트로 다시 donate
+	re_dona_priority();
+	// lock 해제
 	sema_up (&lock->semaphore);
 }
 
@@ -282,7 +324,8 @@ cond_wait (struct condition *cond, struct lock *lock) {
 	ASSERT (lock_held_by_current_thread (lock));
 
 	sema_init (&waiter.semaphore, 0);
-	list_push_back (&cond->waiters, &waiter.elem);
+	// list_push_back (&cond->waiters, &waiter.elem);
+	list_insert_ordered(&cond->waiters,&waiter.elem,cmp_sema_priority,NULL);
 	lock_release (lock);
 	sema_down (&waiter.semaphore);
 	lock_acquire (lock);
@@ -303,8 +346,11 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED) {
 	ASSERT (lock_held_by_current_thread (lock));
 
 	if (!list_empty (&cond->waiters))
+	{
+		list_sort(&cond->waiters, cmp_sema_priority, NULL);
 		sema_up (&list_entry (list_pop_front (&cond->waiters),
 					struct semaphore_elem, elem)->semaphore);
+	}
 }
 
 /* Wakes up all threads, if any, waiting on COND (protected by
@@ -321,3 +367,18 @@ cond_broadcast (struct condition *cond, struct lock *lock) {
 	while (!list_empty (&cond->waiters))
 		cond_signal (cond, lock);
 }
+
+/* 여기서 부터 구현한 함수 */
+// *************************************************************************************//
+// cond 변수에서 waiters 리스트 정렬을 위한 비교 함수
+bool
+cmp_sema_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
+	struct semaphore_elem *a_sema = list_entry (a, struct semaphore_elem, elem);
+	struct semaphore_elem *b_sema = list_entry (b, struct semaphore_elem, elem);
+
+	struct list *waiter_a_sema = &(a_sema->semaphore.waiters);
+	struct list *waiter_b_sema = &(b_sema->semaphore.waiters);
+
+	return list_entry (list_begin(waiter_a_sema), struct thread, elem)->priority > list_entry(list_begin(waiter_b_sema),struct thread, elem)->priority;
+}
+// *************************************************************************************//

@@ -28,6 +28,12 @@ typedef int tid_t;
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
 
+// *************************************************************************************//
+#define NICE_DEFAULT 0
+#define RECENT_CPU_DEFAULT 0
+#define LOAD_AVG_DEFAULT 0
+// *************************************************************************************//
+
 /* A kernel thread or user process.
  *
  * Each thread structure is stored in its own 4 kB page.  The
@@ -91,9 +97,17 @@ struct thread {
 	enum thread_status status;          /* Thread state. */
 	char name[16];                      /* Name (for debugging purposes). */
 	int priority;                       /* Priority. */
+	int init_priority;									/* 해당 스레드의 '원래' Priority. */
+	int nice;														/* nice값: 클수록 CPU 양보 ↑ */
+	int recent_cpu;											/* 해당 스레드가 최근 얼마나 많은 CPU time을 사용 했는지 */
+	struct list donations;							/* 해당 스레드가 가지고 있는 lock을 필요로 하는 스레드들 */
+	struct list_elem d_elem;						/* donations 리스트를 쓰기 위한 리스트 요소 */
+	struct lock * wait_on_lock;					/* 해당 스레드가 기다리고 있는 lock을 가리키는 포인터 */ 
 
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */
+
+	struct list_elem allelem;						/* List element. */
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
@@ -107,6 +121,8 @@ struct thread {
 	/* Owned by thread.c. */
 	struct intr_frame tf;               /* Information for switching */
 	unsigned magic;                     /* Detects stack overflow. */
+	
+	int64_t wake_tick; /* 스레드가 깨어날 시각*/
 };
 
 /* If false (default), use round-robin scheduler.
@@ -143,4 +159,22 @@ int thread_get_load_avg (void);
 
 void do_iret (struct intr_frame *tf);
 
+/* 여기서 부터 구현 함수 */
+// *************************************************************************************//
+void thread_sleep (int64_t);
+void thread_awake(int64_t);
+bool thread_wake_tick_cmp(const struct list_elem *, const struct list_elem *, void *);
+bool cmp_thread_priority(const struct list_elem *, const struct list_elem *, void *);
+bool cmp_delem_priority(const struct list_elem *, const struct list_elem *, void *);
+void schedule_by_priority ();
+void do_donate();
+void remove_with_rock (struct lock *);
+void re_dona_priority();
+void mlfqs_calc_priority (struct thread *);
+void mlfqs_calc_recent_cpu (struct thread *);
+void mlfqs_calc_load_avg ();
+void mlfqs_incr_recent_cpu ();
+void mlfqs_recalc_recent_cpu();
+void mlfqs_recalc_priority ();
+// *************************************************************************************//
 #endif /* threads/thread.h */
